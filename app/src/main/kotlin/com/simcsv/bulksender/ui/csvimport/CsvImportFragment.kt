@@ -14,6 +14,7 @@ import androidx.navigation.fragment.findNavController
 import com.google.android.material.snackbar.Snackbar
 import com.simcsv.bulksender.R
 import com.simcsv.bulksender.databinding.FragmentCsvImportBinding
+import com.simcsv.bulksender.csv.CsvParser
 import com.simcsv.bulksender.permission.PermissionManager
 import com.simcsv.bulksender.sms.SmsQueue
 import kotlinx.coroutines.Dispatchers
@@ -30,12 +31,23 @@ class CsvImportFragment : Fragment() {
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
         val uri = result.data?.data ?: return@registerForActivityResult
+
         try {
-            requireContext().contentResolver.takePersistableUriPermission(
-                uri, Intent.FLAG_GRANT_READ_URI_PERMISSION
-            )
-        } catch (_: SecurityException) {}
-        viewModel.parseCsv(uri)
+            val bytes = requireContext().contentResolver
+                .openInputStream(uri)?.use { it.readBytes() }
+
+            if (bytes == null || bytes.isEmpty()) {
+                viewModel.setError("Could not read file — stream was empty")
+                return@registerForActivityResult
+            }
+
+            viewModel.setLoading()
+            val parseResult = CsvParser.parseBytes(bytes)
+            viewModel.setResult(parseResult)
+
+        } catch (e: Exception) {
+            viewModel.setError("Error reading CSV: ${e.message}")
+        }
     }
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
@@ -102,6 +114,8 @@ class CsvImportFragment : Fragment() {
 
         viewModel.parseResult.observe(viewLifecycleOwner) { result ->
             result ?: return@observe
+            binding.tvDebugStatus.visibility = View.VISIBLE
+            binding.tvDebugStatus.text = "Parsed: ${result.totalRows} rows, ${result.validContacts.size} valid. Info: ${result.headerInfo}"
             binding.cardResults.isVisible = true
             binding.tvTotalRows.text      = result.totalRows.toString()
             binding.tvValidRows.text      = result.validContacts.size.toString()
@@ -115,9 +129,11 @@ class CsvImportFragment : Fragment() {
             }
         }
 
-        viewModel.error.observe(viewLifecycleOwner) { error ->
-            error ?: return@observe
-            Snackbar.make(binding.root, error, Snackbar.LENGTH_LONG).show()
+        viewModel.error.observe(viewLifecycleOwner) { err ->
+            err ?: return@observe
+            binding.tvDebugStatus.visibility = View.VISIBLE
+            binding.tvDebugStatus.text = "ERROR: $err"
+            Snackbar.make(binding.root, err, Snackbar.LENGTH_LONG).show()
         }
 
         viewModel.debugStatus.observe(viewLifecycleOwner) { status ->
