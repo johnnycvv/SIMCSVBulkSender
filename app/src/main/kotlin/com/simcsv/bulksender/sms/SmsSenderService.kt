@@ -78,11 +78,11 @@ class SmsSenderService : Service() {
                 @Suppress("DEPRECATION")
                 settings  = intent.getSerializableExtra(EXTRA_SETTINGS) as? AppSettings ?: AppSettings()
                 sessionId = System.currentTimeMillis().toString()
-                startForeground(NOTIFICATION_ID, buildNotification("Starting…"))
+                startForeground(NOTIFICATION_ID, buildNotification("Starting..."))
                 startSending()
             }
-            ACTION_PAUSE  -> { isPaused = true;  updateNotification("Paused — tap Resume to continue") }
-            ACTION_RESUME -> { isPaused = false; updateNotification("Resuming…") }
+            ACTION_PAUSE  -> { isPaused = true;  updateNotification("Paused") }
+            ACTION_RESUME -> { isPaused = false; updateNotification("Resuming...") }
             ACTION_STOP   -> stopSending()
         }
         return START_NOT_STICKY
@@ -103,98 +103,4 @@ class SmsSenderService : Service() {
             if (settings.scheduledStartEnabled) {
                 val waitMs = computeScheduledDelay()
                 if (waitMs > 0) {
-                    val resumeTime = System.currentTimeMillis() + waitMs
-                    updateNotification("Scheduled — starts at ${formatTime(settings.scheduledStartHour, settings.scheduledStartMinute)}")
-                    withContext(Dispatchers.Main) { progressListener?.onBatchCooldown(resumeTime) }
-                    delay(waitMs)
-                }
-            }
-
-            while (isRunning && SmsQueue.hasPending()) {
-                if (isPaused) { delay(500); continue }
-
-                val todaySent = getTodaySentCount()
-                if (settings.dailySendCap > 0 && todaySent >= settings.dailySendCap) {
-                    isDailyCapReached = true
-                    isRunning = false
-                    updateNotification("Daily cap of ${settings.dailySendCap} reached. Stopping.")
-                    withContext(Dispatchers.Main) { progressListener?.onDailyCapReached(settings.dailySendCap) }
-                    stopSelf(); return@launch
-                }
-
-                if (settings.sessionBatchLimit > 0 && sessionBatchSentCount >= settings.sessionBatchLimit) {
-                    isRunning = false
-                    updateNotification("Session limit of ${settings.sessionBatchLimit} reached.")
-                    withContext(Dispatchers.Main) { progressListener?.onComplete() }
-                    stopSelf(); return@launch
-                }
-
-                if (settings.batchSize > 0 && sessionBatchSentCount > 0
-                    && sessionBatchSentCount % settings.batchSize == 0) {
-                    val cooldownMs   = settings.batchCooldownMinutes * 60_000L
-                    cooldownEndsAt   = System.currentTimeMillis() + cooldownMs
-                    isBatchCooling   = true
-                    updateNotification("Batch cooldown: ${settings.batchCooldownMinutes}m after ${settings.batchSize} messages")
-                    withContext(Dispatchers.Main) { progressListener?.onBatchCooldown(cooldownEndsAt) }
-                    delay(cooldownMs)
-                    isBatchCooling = false
-                }
-
-                if (!isRunning) break
-
-                val job = SmsQueue.poll() ?: break
-                currentRecipient = job.contact.phoneNumber
-                updateNotification("Sending to ${job.contact.phoneNumber} ($sentCount/$totalCount sent, $deliveredCount delivered, $failedCount failed)")
-
-                val subscriptionId = getSubscriptionId()
-                sendSmsWithCallbacks(
-                    phone          = job.contact.phoneNumber,
-                    message        = job.contact.message,
-                    name           = job.contact.name,
-                    jobId          = job.id,
-                    subscriptionId = subscriptionId
-                )
-
-                sessionBatchSentCount++
-
-                withContext(Dispatchers.Main) {
-                    progressListener?.onProgress(sentCount, failedCount, deliveredCount, totalCount, currentRecipient)
-                }
-
-                if (SmsQueue.hasPending()) delay(computeDelay())
-            }
-
-            withContext(Dispatchers.Main) { progressListener?.onComplete() }
-            updateNotification("Complete: $sentCount sent, $deliveredCount delivered, $failedCount failed")
-            stopSelf()
-        }
-    }
-
-    private fun sendSmsWithCallbacks(
-        phone: String,
-        message: String,
-        name: String,
-        jobId: Long,
-        subscriptionId: Int
-    ) {
-        if (message.isBlank()) {
-            SmsQueue.markFailed(jobId, "Message is empty — type a blast message before sending", settings.maxRetryCount)
-            failedCount++
-            SmsLogger.log(applicationContext, SmsLog(
-                sessionId    = sessionId,
-                phoneNumber  = phone,
-                name         = name,
-                message      = message,
-                status       = "FAILED",
-                errorMessage = "Message is empty",
-                simSlot      = settings.selectedSimSlot
-            ))
-            return
-        }
-
-        try {
-            val smsManager = resolveSmsManager(subscriptionId)
-
-            val baseExtras = Intent().apply {
-                putExtra(EXTRA_JOB_ID,    jobId)
-                putExtra(EXTRA_SESSION_
+                    val resumeTime
