@@ -32,7 +32,7 @@ class CsvImportFragment : Fragment() {
     ) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
             result.data?.data?.let { uri ->
-                viewModel.parseCsv(requireContext(), uri)
+                viewModel.parseCsv(uri)
             }
         }
     }
