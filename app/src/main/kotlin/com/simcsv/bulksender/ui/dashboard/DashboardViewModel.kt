@@ -8,9 +8,12 @@ import com.simcsv.bulksender.data.AppDatabase
 import kotlinx.coroutines.launch
 
 data class DashboardStats(
-    val totalSent: Int = 0,
-    val totalFailed: Int = 0,
-    val todaySent: Int = 0
+    val todaySent:       Int = 0,
+    val todayDelivered:  Int = 0,
+    val todayFailed:     Int = 0,
+    val allTimeSent:     Int = 0,
+    val allTimeDelivered: Int = 0,
+    val allTimeFailed:   Int = 0
 )
 
 class DashboardViewModel : ViewModel() {
@@ -21,8 +24,14 @@ class DashboardViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 val dao = AppDatabase.getInstance(context).smsLogDao()
-                val todaySent = dao.getTodaySentCount()
-                stats.postValue(DashboardStats(todaySent = todaySent))
+                stats.postValue(DashboardStats(
+                    todaySent        = dao.getTodaySentCount(),
+                    todayDelivered   = dao.getTodayDeliveredCount(),
+                    todayFailed      = dao.getTodayFailedCount(),
+                    allTimeSent      = dao.getAllTimeSentCount(),
+                    allTimeDelivered = dao.getAllTimeDeliveredCount(),
+                    allTimeFailed    = dao.getAllTimeFailedCount()
+                ))
             } catch (_: Exception) {}
         }
     }
