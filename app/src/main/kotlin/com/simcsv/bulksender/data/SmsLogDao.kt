@@ -5,6 +5,7 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface SmsLogDao {
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(log: SmsLog): Long
 
@@ -17,21 +18,48 @@ interface SmsLogDao {
     @Query("SELECT * FROM sms_logs WHERE sessionId = :sessionId ORDER BY timestamp ASC")
     suspend fun getLogsBySession(sessionId: String): List<SmsLog>
 
-    @Query("SELECT COUNT(*) FROM sms_logs WHERE sessionId = :sessionId AND status = 'SENT'")
-    suspend fun getSentCount(sessionId: String): Int
+    @Query("""
+        SELECT COUNT(*) FROM sms_logs
+        WHERE status = 'SENT'
+        AND date(timestamp/1000,'unixepoch','localtime') = date('now','localtime')
+    """)
+    suspend fun getTodaySentCount(): Int
 
-    @Query("SELECT COUNT(*) FROM sms_logs WHERE sessionId = :sessionId AND status = 'FAILED'")
-    suspend fun getFailedCount(sessionId: String): Int
+    @Query("""
+        SELECT COUNT(*) FROM sms_logs
+        WHERE status = 'DELIVERED'
+        AND date(timestamp/1000,'unixepoch','localtime') = date('now','localtime')
+    """)
+    suspend fun getTodayDeliveredCount(): Int
+
+    @Query("""
+        SELECT COUNT(*) FROM sms_logs
+        WHERE status = 'FAILED'
+        AND date(timestamp/1000,'unixepoch','localtime') = date('now','localtime')
+    """)
+    suspend fun getTodayFailedCount(): Int
+
+    @Query("SELECT COUNT(*) FROM sms_logs WHERE status = 'SENT' OR status = 'DELIVERED'")
+    suspend fun getAllTimeSentCount(): Int
+
+    @Query("SELECT COUNT(*) FROM sms_logs WHERE status = 'DELIVERED'")
+    suspend fun getAllTimeDeliveredCount(): Int
+
+    @Query("SELECT COUNT(*) FROM sms_logs WHERE status = 'FAILED'")
+    suspend fun getAllTimeFailedCount(): Int
+
+    @Query("SELECT COUNT(*) FROM sms_logs WHERE sessionId = :sessionId AND status IN ('SENT','DELIVERED')")
+    suspend fun getSessionSentCount(sessionId: String): Int
 
     @Query("SELECT COUNT(*) FROM sms_logs WHERE sessionId = :sessionId AND status = 'DELIVERED'")
-    suspend fun getDeliveredCount(sessionId: String): Int
+    suspend fun getSessionDeliveredCount(sessionId: String): Int
 
-    @Query("SELECT COUNT(*) FROM sms_logs WHERE date(timestamp/1000,'unixepoch') = date('now') AND status = 'SENT'")
-    suspend fun getTodaySentCount(): Int
+    @Query("SELECT COUNT(*) FROM sms_logs WHERE sessionId = :sessionId AND status = 'FAILED'")
+    suspend fun getSessionFailedCount(sessionId: String): Int
 
     @Query("DELETE FROM sms_logs")
     suspend fun clearAll()
 
     @Query("SELECT * FROM sms_logs ORDER BY timestamp DESC LIMIT :limit")
-    fun getRecentLogs(limit: Int = 100): Flow<List<SmsLog>>
+    fun getRecentLogs(limit: Int = 200): Flow<List<SmsLog>>
 }
