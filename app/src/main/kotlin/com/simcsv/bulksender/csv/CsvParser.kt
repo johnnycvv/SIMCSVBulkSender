@@ -4,10 +4,15 @@ import android.content.Context
 import android.net.Uri
 import com.simcsv.bulksender.data.Contact
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import java.io.BufferedReader
 import java.io.ByteArrayInputStream
 import java.io.InputStreamReader
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 
 data class ParseResult(
     val validContacts: List<Contact>,
@@ -28,60 +33,78 @@ object CsvParser {
     private fun looksLikePhone(value: String): Boolean =
         value.trim().matches(PHONE_CHARS_ONLY)
 
-    suspend fun parse(context: Context, uri: Uri): ParseResult = withContext(Dispatchers.IO) {
-        val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-            ?: return@withContext ParseResult(emptyList(), emptyList(), 0, "Could not open file")
-
-        val validContacts   = mutableListOf<Contact>()
-        val invalidContacts = mutableListOf<Contact>()
-        var rowIndex        = 0
-        var headerInfo      = "Reading phone numbers."
-
-        BufferedReader(InputStreamReader(ByteArrayInputStream(bytes))).use { reader ->
-            var line = reader.readLine()
-            while (line != null && line.isBlank()) line = reader.readLine()
-
-            if (line == null) return@use
-
-            val firstCell = line.substringBefore(',').trim()
-            val isHeader  = !looksLikePhone(firstCell)
-            headerInfo    = if (isHeader) "Header skipped." else "No header. Reading all rows."
-
-            if (!isHeader) {
-                rowIndex++
-                processLine(firstCell, rowIndex, validContacts, invalidContacts)
-            }
-
-            line = reader.readLine()
-            while (line != null) {
-                if (line.isNotBlank()) {
-                    rowIndex++
-                    processLine(line.substringBefore(',').trim(), rowIndex, validContacts, invalidContacts)
+    private suspend fun readBytes(context: Context, uri: Uri): ByteArray? =
+        suspendCancellableCoroutine { cont ->
+            val thread = Thread {
+                try {
+                    val bytes = context.contentResolver.openInputStream(uri)
+                        ?.use { it.readBytes() }
+                    if (cont.isActive) cont.resume(bytes)
+                } catch (e: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                } catch (e: Exception) {
+                    if (cont.isActive) cont.resumeWithException(e)
                 }
-                line = reader.readLine()
             }
+            thread.isDaemon = true
+            thread.start()
+            cont.invokeOnCancellation { thread.interrupt() }
         }
 
-        ParseResult(validContacts, invalidContacts, rowIndex, headerInfo)
+    suspend fun parse(context: Context, uri: Uri): ParseResult {
+        val bytes = try {
+            withTimeout(30_000L) { readBytes(context, uri) }
+        } catch (e: TimeoutCancellationException) {
+            return ParseResult(emptyList(), emptyList(), 0,
+                "TIMEOUT: file took >30s to open. Is it on local storage?")
+        } catch (e: Exception) {
+            return ParseResult(emptyList(), emptyList(), 0,
+                "ERROR opening file: ${e.message}")
+        }
+
+        if (bytes == null) {
+            return ParseResult(emptyList(), emptyList(), 0, "Could not open file — null stream")
+        }
+
+        return withContext(Dispatchers.IO) {
+            val validContacts   = mutableListOf<Contact>()
+            val invalidContacts = mutableListOf<Contact>()
+            var rowIndex        = 0
+            var headerInfo      = "Reading phone numbers."
+
+            BufferedReader(InputStreamReader(ByteArrayInputStream(bytes))).use { reader ->
+                var line = reader.readLine()
+                while (line != null && line.isBlank()) line = reader.readLine()
+                if (line == null) return@withContext ParseResult(emptyList(), emptyList(), 0, "File is empty")
+
+                val firstCell = line.substringBefore(',').trim()
+                val isHeader  = !looksLikePhone(firstCell)
+                headerInfo    = if (isHeader) "Header skipped." else "No header. Reading all rows."
+
+                if (!isHeader) {
+                    rowIndex++
+                    processLine(firstCell, rowIndex, validContacts, invalidContacts)
+                }
+
+                line = reader.readLine()
+                while (line != null) {
+                    if (line.isNotBlank()) {
+                        rowIndex++
+                        processLine(line.substringBefore(',').trim(), rowIndex, validContacts, invalidContacts)
+                    }
+                    line = reader.readLine()
+                }
+            }
+
+            ParseResult(validContacts, invalidContacts, rowIndex, headerInfo)
+        }
     }
 
-    private fun processLine(
-        raw: String,
-        rowIndex: Int,
-        valid: MutableList<Contact>,
-        invalid: MutableList<Contact>
-    ) {
+    private fun processLine(raw: String, rowIndex: Int, valid: MutableList<Contact>, invalid: MutableList<Contact>) {
         val phone = normalizePhone(raw)
         val (isValid, errorMsg) = validatePhone(phone)
-        val contact = Contact(
-            rowIndex        = rowIndex,
-            phoneNumber     = phone,
-            message         = "",
-            name            = "",
-            isValid         = isValid,
-            validationError = errorMsg
-        )
-        if (isValid) valid.add(contact) else invalid.add(contact)
+        if (isValid) valid.add(Contact(rowIndex, phone, "", "", true, ""))
+        else         invalid.add(Contact(rowIndex, phone, "", "", false, errorMsg))
     }
 
     private fun normalizePhone(raw: String): String {
@@ -105,7 +128,6 @@ object CsvParser {
         if (phone.isBlank()) return Pair(false, "Phone number is empty")
         val digits  = phone.replace(STRIP_NON_DIGITS, "")
         val isValid = UK_REGEX.matches(digits) || US_REGEX.matches(digits) || AU_REGEX.matches(digits)
-        return if (isValid) Pair(true, "")
-        else Pair(false, "Invalid UK/US/AU number: $phone")
+        return if (isValid) Pair(true, "") else Pair(false, "Invalid UK/US/AU number: $phone")
     }
 }
