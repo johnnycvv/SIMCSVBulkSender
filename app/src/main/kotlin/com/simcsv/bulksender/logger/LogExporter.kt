@@ -7,6 +7,7 @@ import androidx.core.content.FileProvider
 import com.simcsv.bulksender.data.AppDatabase
 import com.simcsv.bulksender.data.SmsLog
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.text.SimpleDateFormat
@@ -23,7 +24,7 @@ object LogExporter {
                 val logs: List<SmsLog> = if (sessionId != null) {
                     db.smsLogDao().getLogsBySession(sessionId)
                 } else {
-                    kotlinx.coroutines.flow.first(db.smsLogDao().getAllLogs())
+                    db.smsLogDao().getAllLogs().first()
                 }
 
                 val fileName = "sms_log_${System.currentTimeMillis()}.csv"
@@ -47,11 +48,7 @@ object LogExporter {
                     }
                 }
 
-                FileProvider.getUriForFile(
-                    context,
-                    "${context.packageName}.provider",
-                    file
-                )
+                FileProvider.getUriForFile(context, "${context.packageName}.provider", file)
             } catch (e: Exception) {
                 null
             }
@@ -70,11 +67,4 @@ object LogExporter {
             "\"${value.replace("\"", "\"\"")}\""
         } else value
     }
-}
-
-private suspend fun <T> kotlinx.coroutines.flow.Flow<T>.first(): T {
-    var result: T? = null
-    collect { result = it; return@collect }
-    @Suppress("UNCHECKED_CAST")
-    return result as T
 }
