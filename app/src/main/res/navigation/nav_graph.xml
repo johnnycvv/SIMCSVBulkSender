@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<navigation xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/nav_graph"
+    app:startDestination="@id/dashboardFragment">
+
+    <fragment
+        android:id="@+id/dashboardFragment"
+        android:name="com.simcsv.bulksender.ui.dashboard.DashboardFragment"
+        android:label="Dashboard">
+        <action
+            android:id="@+id/action_dashboard_to_import"
+            app:destination="@id/csvImportFragment" />
+        <action
+            android:id="@+id/action_dashboard_to_preview"
+            app:destination="@id/previewFragment" />
+        <action
+            android:id="@+id/action_dashboard_to_logs"
+            app:destination="@id/logsFragment" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/csvImportFragment"
+        android:name="com.simcsv.bulksender.ui.csvimport.CsvImportFragment"
+        android:label="Import CSV">
+        <action
+            android:id="@+id/action_import_to_preview"
+            app:destination="@id/previewFragment" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/previewFragment"
+        android:name="com.simcsv.bulksender.ui.preview.PreviewFragment"
+        android:label="Preview Queue">
+        <action
+            android:id="@+id/action_preview_to_progress"
+            app:destination="@id/progressFragment" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/progressFragment"
+        android:name="com.simcsv.bulksender.ui.progress.ProgressFragment"
+        android:label="Sending Progress">
+        <action
+            android:id="@+id/action_progress_to_logs"
+            app:destination="@id/logsFragment" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/logsFragment"
+        android:name="com.simcsv.bulksender.ui.logs.LogsFragment"
+        android:label="Logs" />
+
+    <fragment
+        android:id="@+id/settingsFragment"
+        android:name="com.simcsv.bulksender.ui.settings.SettingsFragment"
+        android:label="Settings" />
+
+</navigation>

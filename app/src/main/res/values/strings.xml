@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">SIM CSV Bulk Sender</string>
+    <string name="dashboard">Dashboard</string>
+    <string name="import_csv">Import CSV</string>
+    <string name="preview_queue">Preview Queue</string>
+    <string name="sending_progress">Sending Progress</string>
+    <string name="logs">Logs</string>
+    <string name="settings">Settings</string>
+    <string name="btn_import">Import CSV File</string>
+    <string name="btn_start_sending">Start Sending</string>
+    <string name="btn_pause">Pause</string>
+    <string name="btn_stop">Stop</string>
+    <string name="notification_sending">Bulk SMS sending in progress</string>
+</resources>
