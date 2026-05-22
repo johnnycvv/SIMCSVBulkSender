@@ -6,6 +6,7 @@ import com.simcsv.bulksender.data.Contact
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.BufferedReader
+import java.io.ByteArrayInputStream
 import java.io.InputStreamReader
 
 data class ParseResult(
@@ -28,17 +29,15 @@ object CsvParser {
         value.trim().matches(PHONE_CHARS_ONLY)
 
     suspend fun parse(context: Context, uri: Uri): ParseResult = withContext(Dispatchers.IO) {
-        val validContacts   = mutableListOf<Contact>()
-        val invalidContacts = mutableListOf<Contact>()
-        var rowIndex   = 0
-        var headerInfo = "Reading phone numbers."
-
-        val stream = context.contentResolver.openInputStream(uri)
+        val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
             ?: return@withContext ParseResult(emptyList(), emptyList(), 0, "Could not open file")
 
-        stream.use { inputStream ->
-            val reader = BufferedReader(InputStreamReader(inputStream), 128 * 1024)
+        val validContacts   = mutableListOf<Contact>()
+        val invalidContacts = mutableListOf<Contact>()
+        var rowIndex        = 0
+        var headerInfo      = "Reading phone numbers."
 
+        BufferedReader(InputStreamReader(ByteArrayInputStream(bytes))).use { reader ->
             var line = reader.readLine()
             while (line != null && line.isBlank()) line = reader.readLine()
 
@@ -46,8 +45,7 @@ object CsvParser {
 
             val firstCell = line.substringBefore(',').trim()
             val isHeader  = !looksLikePhone(firstCell)
-
-            headerInfo = if (isHeader) "Header skipped." else "No header. Reading all rows."
+            headerInfo    = if (isHeader) "Header skipped." else "No header. Reading all rows."
 
             if (!isHeader) {
                 rowIndex++
@@ -58,8 +56,7 @@ object CsvParser {
             while (line != null) {
                 if (line.isNotBlank()) {
                     rowIndex++
-                    val raw = line.substringBefore(',').trim()
-                    processLine(raw, rowIndex, validContacts, invalidContacts)
+                    processLine(line.substringBefore(',').trim(), rowIndex, validContacts, invalidContacts)
                 }
                 line = reader.readLine()
             }
@@ -75,14 +72,14 @@ object CsvParser {
         invalid: MutableList<Contact>
     ) {
         val phone = normalizePhone(raw)
-        val (isValid, error) = validatePhone(phone)
+        val (isValid, errorMsg) = validatePhone(phone)
         val contact = Contact(
             rowIndex        = rowIndex,
             phoneNumber     = phone,
             message         = "",
             name            = "",
             isValid         = isValid,
-            validationError = error
+            validationError = errorMsg
         )
         if (isValid) valid.add(contact) else invalid.add(contact)
     }
@@ -91,13 +88,13 @@ object CsvParser {
         var phone = raw.replace(STRIP_FORMATTING, "")
         if (!phone.startsWith("+")) {
             phone = when {
-                phone.startsWith("0044")                      -> "+44" + phone.substring(4)
-                phone.startsWith("0061")                      -> "+61" + phone.substring(4)
-                phone.startsWith("044") && phone.length == 13 -> "+44" + phone.substring(3)
-                phone.startsWith("061") && phone.length == 12 -> "+61" + phone.substring(3)
-                phone.startsWith("07")  && phone.length == 11 -> "+44" + phone.substring(1)
-                phone.startsWith("04")  && phone.length == 10 -> "+61" + phone.substring(1)
-                phone.startsWith("1")   && phone.length == 11 -> "+$phone"
+                phone.startsWith("0044")                       -> "+44" + phone.substring(4)
+                phone.startsWith("0061")                       -> "+61" + phone.substring(4)
+                phone.startsWith("044") && phone.length == 13  -> "+44" + phone.substring(3)
+                phone.startsWith("061") && phone.length == 12  -> "+61" + phone.substring(3)
+                phone.startsWith("07")  && phone.length == 11  -> "+44" + phone.substring(1)
+                phone.startsWith("04")  && phone.length == 10  -> "+61" + phone.substring(1)
+                phone.startsWith("1")   && phone.length == 11  -> "+$phone"
                 else -> phone
             }
         }
