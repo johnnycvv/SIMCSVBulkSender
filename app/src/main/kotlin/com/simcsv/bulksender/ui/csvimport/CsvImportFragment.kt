@@ -32,24 +32,29 @@ class CsvImportFragment : Fragment() {
     ) { result ->
         val uri = result.data?.data ?: return@registerForActivityResult
 
-        val bytes = try {
-            requireContext().contentResolver.openInputStream(uri)?.use { it.readBytes() }
-        } catch (e: Exception) {
-            viewModel.setError("Error reading file: ${e.message}")
-            return@registerForActivityResult
-        }
-
-        if (bytes == null || bytes.isEmpty()) {
-            viewModel.setError("Could not read file — stream was empty")
-            return@registerForActivityResult
-        }
-
+        val appContext = requireContext().applicationContext
         viewModel.setLoading()
+
         lifecycleScope.launch {
-            val parseResult = withContext(Dispatchers.Default) {
-                CsvParser.parseBytes(bytes)
+            try {
+                val bytes = withContext(Dispatchers.IO) {
+                    appContext.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                }
+
+                if (bytes == null || bytes.isEmpty()) {
+                    viewModel.setError("Could not read file — stream was empty")
+                    return@launch
+                }
+
+                val parseResult = withContext(Dispatchers.Default) {
+                    CsvParser.parseBytes(bytes)
+                }
+
+                viewModel.setResult(parseResult)
+
+            } catch (e: Exception) {
+                viewModel.setError("Error: ${e.message ?: e.javaClass.simpleName}")
             }
-            viewModel.setResult(parseResult)
         }
     }
 
