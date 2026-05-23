@@ -40,7 +40,9 @@ class CsvImportFragment : Fragment() {
 
         Thread {
             try {
-                val bytes = cr.openInputStream(uri)?.use { it.readBytes() }
+                val bytes = cr.openFileDescriptor(uri, "r")?.use { pfd ->
+                    java.io.FileInputStream(pfd.fileDescriptor).use { it.readBytes() }
+                }
 
                 if (bytes == null || bytes.isEmpty()) {
                     mainHandler.post { viewModel.setError("Could not read file — stream was empty") }
