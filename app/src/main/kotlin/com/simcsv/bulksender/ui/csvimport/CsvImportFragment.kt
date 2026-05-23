@@ -32,21 +32,24 @@ class CsvImportFragment : Fragment() {
     ) { result ->
         val uri = result.data?.data ?: return@registerForActivityResult
 
-        try {
-            val bytes = requireContext().contentResolver
-                .openInputStream(uri)?.use { it.readBytes() }
-
-            if (bytes == null || bytes.isEmpty()) {
-                viewModel.setError("Could not read file — stream was empty")
-                return@registerForActivityResult
-            }
-
-            viewModel.setLoading()
-            val parseResult = CsvParser.parseBytes(bytes)
-            viewModel.setResult(parseResult)
-
+        val bytes = try {
+            requireContext().contentResolver.openInputStream(uri)?.use { it.readBytes() }
         } catch (e: Exception) {
-            viewModel.setError("Error reading CSV: ${e.message}")
+            viewModel.setError("Error reading file: ${e.message}")
+            return@registerForActivityResult
+        }
+
+        if (bytes == null || bytes.isEmpty()) {
+            viewModel.setError("Could not read file — stream was empty")
+            return@registerForActivityResult
+        }
+
+        viewModel.setLoading()
+        lifecycleScope.launch {
+            val parseResult = withContext(Dispatchers.Default) {
+                CsvParser.parseBytes(bytes)
+            }
+            viewModel.setResult(parseResult)
         }
     }
 
@@ -115,7 +118,7 @@ class CsvImportFragment : Fragment() {
         viewModel.parseResult.observe(viewLifecycleOwner) { result ->
             result ?: return@observe
             binding.tvDebugStatus.visibility = View.VISIBLE
-            binding.tvDebugStatus.text = "Parsed: ${result.totalRows} rows, ${result.validContacts.size} valid. Info: ${result.headerInfo}"
+            binding.tvDebugStatus.text = "Parsed: ${result.totalRows} rows, ${result.validContacts.size} valid. ${result.headerInfo}"
             binding.cardResults.isVisible = true
             binding.tvTotalRows.text      = result.totalRows.toString()
             binding.tvValidRows.text      = result.validContacts.size.toString()
