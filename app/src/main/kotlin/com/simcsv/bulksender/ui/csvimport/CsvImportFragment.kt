@@ -2,6 +2,8 @@ package com.simcsv.bulksender.ui.csvimport
 
 import android.content.Intent
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.text.Editable
 import android.text.TextWatcher
 import android.view.*
@@ -26,36 +28,32 @@ class CsvImportFragment : Fragment() {
     private var _binding: FragmentCsvImportBinding? = null
     private val binding get() = _binding!!
     private val viewModel: CsvImportViewModel by viewModels()
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     private val filePickerLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
         val uri = result.data?.data ?: return@registerForActivityResult
 
-        val appContext = requireContext().applicationContext
+        val cr = requireContext().applicationContext.contentResolver
         viewModel.setLoading()
 
-        lifecycleScope.launch {
+        Thread {
             try {
-                val bytes = withContext(Dispatchers.IO) {
-                    appContext.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-                }
+                val bytes = cr.openInputStream(uri)?.use { it.readBytes() }
 
                 if (bytes == null || bytes.isEmpty()) {
-                    viewModel.setError("Could not read file — stream was empty")
-                    return@launch
+                    mainHandler.post { viewModel.setError("Could not read file — stream was empty") }
+                    return@Thread
                 }
 
-                val parseResult = withContext(Dispatchers.Default) {
-                    CsvParser.parseBytes(bytes)
-                }
-
-                viewModel.setResult(parseResult)
+                val parseResult = CsvParser.parseBytes(bytes)
+                mainHandler.post { viewModel.setResult(parseResult) }
 
             } catch (e: Exception) {
-                viewModel.setError("Error: ${e.message ?: e.javaClass.simpleName}")
+                mainHandler.post { viewModel.setError("Error: ${e.message ?: e.javaClass.simpleName}") }
             }
-        }
+        }.start()
     }
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
